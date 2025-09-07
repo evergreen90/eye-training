@@ -115,14 +115,32 @@ def create_app() -> Flask:
     try:
         os.makedirs(app.instance_path, exist_ok=True)
     except Exception:
-        # If the instance path cannot be created, fallback will be env DB_PATH
+        # If the instance path cannot be created, we'll fallback below
         pass
 
-    # Resolve DB path; default to file in CWD unless env overrides
-    app.config["DB_PATH"] = os.environ.get(
-        "DB_PATH",
-        os.path.join(app.instance_path, "presbyopia_app.sqlite3"),
-    )
+    # Resolve DB path with robust fallbacks for PaaS (read-only roots, etc.)
+    env_db = os.environ.get("DB_PATH")
+    if env_db:
+        db_path = env_db
+    else:
+        # Prefer Flask instance/ dir (writable in most setups)
+        db_path = os.path.join(app.instance_path, "presbyopia_app.sqlite3")
+
+    # Ensure parent dir exists or fallback to /tmp which is writable on most PaaS
+    try:
+        parent = os.path.dirname(db_path) or "."
+        os.makedirs(parent, exist_ok=True)
+        # Quick writability probe: try opening a temp file in the dir
+        test_path = os.path.join(parent, ".__writable_check__")
+        with open(test_path, "w") as _f:
+            _f.write("ok")
+        os.unlink(test_path)
+    except Exception:
+        # Fallback
+        db_path = os.path.join("/tmp", "presbyopia_app.sqlite3")
+        os.makedirs(os.path.dirname(db_path), exist_ok=True)
+
+    app.config["DB_PATH"] = db_path
 
     # Honour reverse proxy headers when behind a load balancer if enabled
     if os.environ.get("TRUST_PROXY"):
@@ -138,6 +156,7 @@ def create_app() -> Flask:
         pass
 
     # Initialize DB on startup
+    app.logger.info("Using DB_PATH=%s", app.config["DB_PATH"])  # helpful for deploy logs
     with _get_conn(app.config["DB_PATH"]) as conn:
         conn.executescript(SCHEMA_SQL)
         conn.commit()
@@ -207,7 +226,9 @@ def create_app() -> Flask:
 if __name__ == "__main__":
     # Default debug False for safety in accidental production usage
     debug = os.environ.get("FLASK_DEBUG", "0") not in {"0", "false", "False"}
-    host = os.environ.get("FLASK_RUN_HOST", "127.0.0.1")
+    # In production-like runs (python app.py on PaaS), bind 0.0.0.0 by default
+    host_env = os.environ.get("FLASK_RUN_HOST")
+    host = host_env or ("127.0.0.1" if debug else "0.0.0.0")
     port = int(os.environ.get("PORT", "5000"))
     app = create_app()
     app.run(debug=debug, host=host, port=port)
