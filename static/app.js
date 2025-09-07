@@ -53,20 +53,34 @@
   $('btnStopTimer')?.addEventListener('click', stopReminder);
 
   // ===== 交代調節（near-far） =====
+  let nfRunning = false;
+  let nfStart = 0;
+  let nfRafId = null;
+
   function doNearFar() {
     const el = $('nearfar');
-    if (!el) return;
+    if (!el || nfRunning) return;
     const DURATION = 120 * 1000; // 2分
-    const start = Date.now();
+    nfRunning = true;
+    nfStart = Date.now();
+
+    function finish(logElapsed = true) {
+      nfRunning = false;
+      if (nfRafId) cancelAnimationFrame(nfRafId);
+      nfRafId = null;
+      el.style.filter = 'blur(0px)';
+      el.style.transform = 'scale(1)';
+      if (logElapsed) {
+        const elapsed = Math.min(Date.now() - nfStart, DURATION);
+        const sec = Math.max(0, Math.round(elapsed / 1000));
+        if (sec > 0) postJSON('/api/log', { kind: 'session', type: 'nearfar', duration_sec: sec }).catch(() => {});
+      }
+    }
 
     function tick() {
-      const t = Date.now() - start;
-      if (t >= DURATION) {
-        el.style.filter = 'blur(0px)';
-        el.style.transform = 'scale(1)';
-        postJSON('/api/log', { kind: 'session', type: 'nearfar', duration_sec: Math.round(DURATION / 1000) }).catch(() => {});
-        return;
-      }
+      if (!nfRunning) return; // stopped externally
+      const t = Date.now() - nfStart;
+      if (t >= DURATION) { finish(true); return; }
       if (Math.floor(t / 3000) % 2 === 0) {
         el.style.filter = 'blur(3px)';
         el.style.transform = 'scale(1.15)';
@@ -74,27 +88,50 @@
         el.style.filter = 'blur(0.5px)';
         el.style.transform = 'scale(1)';
       }
-      requestAnimationFrame(tick);
+      nfRafId = requestAnimationFrame(tick);
     }
     tick();
   }
 
+  function stopNearFar() {
+    if (!nfRunning) return;
+    // finish and log elapsed
+    const el = $('nearfar');
+    if (!el) return;
+    nfRunning = false;
+    if (nfRafId) cancelAnimationFrame(nfRafId);
+    nfRafId = null;
+    const elapsed = Date.now() - nfStart;
+    const sec = Math.max(0, Math.round(elapsed / 1000));
+    el.style.filter = 'blur(0px)';
+    el.style.transform = 'scale(1)';
+    if (sec > 0) postJSON('/api/log', { kind: 'session', type: 'nearfar', duration_sec: sec }).catch(() => {});
+  }
+
   $('btnNearFar')?.addEventListener('click', doNearFar);
+  $('btnNearFarStop')?.addEventListener('click', stopNearFar);
 
   // ===== サッケード =====
+  let scRunning = false;
+  let scStart = 0;
+  let scTimeoutId = null;
+  let scTries = 0;
+  let scHit = 0;
+
   function doSaccade() {
     const target = $('target');
     const stage = $('scStage');
-    if (!target || !stage) return;
+    if (!target || !stage || scRunning) return;
 
     const rect = () => stage.getBoundingClientRect();
-    let tries = 0, hit = 0;
+    scTries = 0; scHit = 0;
     text('tries', '0');
     text('hit', '0');
 
     target.style.display = 'block';
     const DURATION = 60 * 1000 * 2; // 1分×2
-    const start = Date.now();
+    scRunning = true;
+    scStart = Date.now();
 
     function placeRandom() {
       const r = rect();
@@ -103,31 +140,61 @@
       const y = Math.random() * (r.height - 2 * margin) + margin;
       target.style.left = `${x}px`;
       target.style.top = `${y}px`;
-      tries++; text('tries', tries.toString());
+      scTries++; text('tries', scTries.toString());
+    }
+
+    function finish() {
+      if (!scRunning) return;
+      scRunning = false;
+      if (scTimeoutId) clearTimeout(scTimeoutId);
+      scTimeoutId = null;
+      target.style.display = 'none';
+      target.onclick = null;
+      const elapsed = Math.min(Date.now() - scStart, DURATION);
+      const sec = Math.max(0, Math.round(elapsed / 1000));
+      if (sec > 0) postJSON('/api/log', {
+        kind: 'session',
+        type: 'saccade',
+        duration_sec: sec,
+        meta: JSON.stringify({ tries: scTries, hit: scHit })
+      }).catch(() => {});
     }
 
     function step() {
-      const elapsed = Date.now() - start;
-      if (elapsed >= DURATION) {
-        target.style.display = 'none';
-        postJSON('/api/log', {
-          kind: 'session',
-          type: 'saccade',
-          duration_sec: Math.round(DURATION / 1000),
-          meta: JSON.stringify({ tries, hit })
-        }).catch(() => {});
-        return;
-      }
+      if (!scRunning) return;
+      const elapsed = Date.now() - scStart;
+      if (elapsed >= DURATION) { finish(); return; }
       placeRandom();
-      setTimeout(step, 800);
+      scTimeoutId = setTimeout(step, 800);
     }
 
-    target.onclick = () => { hit++; text('hit', hit.toString()); };
+    target.onclick = () => { if (!scRunning) return; scHit++; text('hit', scHit.toString()); };
 
     step();
   }
 
+  function stopSaccade() {
+    if (!scRunning) return;
+    const target = $('target');
+    if (scTimeoutId) clearTimeout(scTimeoutId);
+    scTimeoutId = null;
+    scRunning = false;
+    if (target) {
+      target.style.display = 'none';
+      target.onclick = null;
+    }
+    const elapsed = Date.now() - scStart;
+    const sec = Math.max(0, Math.round(elapsed / 1000));
+    if (sec > 0) postJSON('/api/log', {
+      kind: 'session',
+      type: 'saccade',
+      duration_sec: sec,
+      meta: JSON.stringify({ tries: scTries, hit: scHit })
+    }).catch(() => {});
+  }
+
   $('btnSaccade')?.addEventListener('click', doSaccade);
+  $('btnSaccadeStop')?.addEventListener('click', stopSaccade);
 
   // ===== メトリクス保存 =====
   async function saveMetric() {
