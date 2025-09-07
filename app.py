@@ -17,6 +17,8 @@ from flask import (
     render_template,
     after_this_request,
 )
+from werkzeug.middleware.proxy_fix import ProxyFix
+import logging
 
 
 # ----------------------------------------------------------------------------
@@ -106,10 +108,34 @@ def _export_to_csv(db_path: str, outfile: Path) -> None:
 
 
 def create_app() -> Flask:
-    app = Flask(__name__)
+    # Use instance-relative config so instance/ is writable for DB by default
+    app = Flask(__name__, instance_relative_config=True)
+
+    # Ensure instance dir exists (for SQLite on production)
+    try:
+        os.makedirs(app.instance_path, exist_ok=True)
+    except Exception:
+        # If the instance path cannot be created, fallback will be env DB_PATH
+        pass
 
     # Resolve DB path; default to file in CWD unless env overrides
-    app.config["DB_PATH"] = os.environ.get("DB_PATH", "presbyopia_app.sqlite3")
+    app.config["DB_PATH"] = os.environ.get(
+        "DB_PATH",
+        os.path.join(app.instance_path, "presbyopia_app.sqlite3"),
+    )
+
+    # Honour reverse proxy headers when behind a load balancer if enabled
+    if os.environ.get("TRUST_PROXY"):
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)  # type: ignore[assignment]
+
+    # Configure logging to integrate with gunicorn if present
+    try:
+        gunicorn_logger = logging.getLogger("gunicorn.error")
+        if gunicorn_logger and gunicorn_logger.handlers:
+            app.logger.handlers = gunicorn_logger.handlers
+            app.logger.setLevel(gunicorn_logger.level)
+    except Exception:
+        pass
 
     # Initialize DB on startup
     with _get_conn(app.config["DB_PATH"]) as conn:
@@ -119,6 +145,10 @@ def create_app() -> Flask:
     @app.route("/")
     def index():
         return render_template("index.html", now=datetime.now().strftime("%Y-%m-%d %H:%M"))
+
+    @app.route("/healthz")
+    def healthz():
+        return jsonify({"ok": True}), 200
 
     @app.route("/api/log", methods=["POST"])
     def log_api():
@@ -175,7 +205,9 @@ def create_app() -> Flask:
 
 
 if __name__ == "__main__":
-    # Respect FLASK_DEBUG or default to True for local dev
-    debug = os.environ.get("FLASK_DEBUG", "1") not in {"0", "false", "False"}
+    # Default debug False for safety in accidental production usage
+    debug = os.environ.get("FLASK_DEBUG", "0") not in {"0", "false", "False"}
+    host = os.environ.get("FLASK_RUN_HOST", "127.0.0.1")
+    port = int(os.environ.get("PORT", "5000"))
     app = create_app()
-    app.run(debug=debug)
+    app.run(debug=debug, host=host, port=port)
