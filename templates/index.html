@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="ja">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>快適視サポート（MVP）</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
+</head>
+
+<body>
+    <header>
+        <div class="row">
+            <div><strong>快適視サポート（MVP）</strong></div>
+            <div class="muted">{{ now }}</div>
+            <div style="margin-left:auto" class="row">
+                <button id="btnExport">CSVエクスポート</button>
+            </div>
+        </div>
+    </header>
+
+    <main>
+        <section class="card">
+            <div class="row">
+                <div class="label">20-20-20 リマインダー:</div>
+                <label>間隔(分) <input id="intervalMin" type="number" min="5" max="60" value="20" /></label>
+                <button id="btnStartTimer" class="primary">開始</button>
+                <button id="btnStopTimer">停止</button>
+                <div id="timer" class="muted">未開始</div>
+            </div>
+            <div class="muted">20分ごとに20秒間、遠く(6m)を見ようと促します。</div>
+        </section>
+
+        <section class="card">
+            <div class="row">
+                <div class="label">交代調節（near-far） 2分</div>
+                <button id="btnNearFar" class="primary">開始</button>
+            </div>
+            <div class="stage" id="nfStage">
+                <div id="nearfar">●</div>
+            </div>
+            <div class="muted">ゆっくりボケ具合（blur）を変え、近く→遠くの意識切替を誘導。痛みや見えにくさがあれば中止。</div>
+        </section>
+
+        <section class="card">
+            <div class="row">
+                <div class="label">サッケード 1分×2</div>
+                <button id="btnSaccade" class="primary">開始</button>
+                <div>成功: <span id="hit">0</span> / 試行: <span id="tries">0</span></div>
+            </div>
+            <div class="stage" id="scStage">
+                <div id="target"></div>
+            </div>
+            <div class="muted">ランダム出現する点を素早く見てタップ。速度はゆるめ。体調に合わせて。</div>
+        </section>
+
+        <section class="card">
+            <div class="row">
+                <div class="label">今日の主観スコア (1=とても楽, 5=とても疲れ)</div>
+                <input id="fatigue" type="number" min="1" max="5" value="3" />
+                <label>近業(分) <input id="nearMin" type="number" min="0" max="1000" value="120" /></label>
+                <label>休憩回数 <input id="breaks" type="number" min="0" max="60" value="4" /></label>
+                <button id="btnSaveMetric" class="primary">保存</button>
+                <div id="saveMsg" class="muted"></div>
+            </div>
+        </section>
+
+        <section class="card" style="border-color:#f2c200">
+            <strong>注意</strong>
+            <ul>
+                <li>1回2〜5分、合計15分/日以内を目安に。痛み・頭痛・複視があれば中止し眼科受診。</li>
+                <li>眼鏡度数が合っていない／白内障・緑内障が疑われる場合、まず受診を。</li>
+                <li>本アプリは医療機器ではありません。疲労軽減・習慣化を支援するツールです。</li>
+            </ul>
+        </section>
+    </main>
+
+    <script src="{{ url_for('static', filename='app.js') }}" defer></script>
+</body>
+
+</html>

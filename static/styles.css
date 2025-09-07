@@ -1,0 +1,98 @@
+:root {
+    --border: #ddd;
+    --muted: #666;
+    --brand: #0b84ff;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    font-family: system-ui, -apple-system, Segoe UI, Roboto, "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
+    line-height: 1.6;
+    margin: 0;
+}
+
+header {
+    position: sticky;
+    top: 0;
+    background: #fff;
+    border-bottom: 1px solid var(--border);
+    padding: 10px 16px;
+    z-index: 10;
+}
+
+main {
+    padding: 16px;
+    display: grid;
+    gap: 16px;
+    max-width: 880px;
+    margin: 0 auto;
+}
+
+.card {
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+}
+
+.row {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+button {
+    padding: 10px 14px;
+    border: 1px solid #888;
+    background: #f8f8f8;
+    border-radius: 10px;
+    cursor: pointer;
+}
+
+button.primary {
+    background: var(--brand);
+    color: #fff;
+    border-color: var(--brand);
+}
+
+.muted {
+    color: var(--muted);
+    font-size: 0.9rem;
+}
+
+.label {
+    font-weight: 600;
+}
+
+.stage {
+    height: 300px;
+    border: 1px dashed #aaa;
+    border-radius: 12px;
+    position: relative;
+    overflow: hidden;
+    display: grid;
+    place-items: center;
+}
+
+#target {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: #111;
+    position: absolute;
+    display: none;
+}
+
+#nearfar {
+    font-size: 64px;
+    filter: blur(0px);
+    transition: filter 1s linear, transform 1s linear;
+}
+
+input[type=number] {
+    width: 80px;
+    padding: 6px;
+}
